@@ -46,7 +46,7 @@ export default {
       const {storefront} = createStorefrontClient({
         cache,
         waitUntil,
-        i18n: {language: 'EN', country: 'US'},
+        i18n: getLocaleFromRequest(request),
         publicStorefrontToken: env.PUBLIC_STOREFRONT_API_TOKEN,
         privateStorefrontToken: env.PRIVATE_STOREFRONT_API_TOKEN,
         storeDomain: env.PUBLIC_STORE_DOMAIN,
@@ -117,3 +117,20 @@ export default {
     }
   },
 };
+
+function getLocaleFromRequest(request: Request): I18nLocale {
+  const url = new URL(request.url);
+  const firstPathPart = url.pathname.split('/')[1]?.toUpperCase() ?? '';
+
+  type I18nFromUrl = [I18nLocale['language'], I18nLocale['country']];
+
+  let pathPrefix = '';
+  let [language, country]: I18nFromUrl = ['EN', 'US'];
+
+  if (/^[A-Z]{2}-[A-Z]{2}$/i.test(firstPathPart)) {
+    pathPrefix = '/' + firstPathPart;
+    [language, country] = firstPathPart.split('-') as I18nFromUrl;
+  }
+
+  return {language, country, pathPrefix};
+}
