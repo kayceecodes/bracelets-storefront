@@ -81,7 +81,7 @@ export function HeaderMenu({
             : item.url;
         return (
           <NavLink
-            className="header-menu-item"
+            className="header-menu-item bg-blue-800 m-5"
             end
             key={item.id}
             onClick={closeAside}
