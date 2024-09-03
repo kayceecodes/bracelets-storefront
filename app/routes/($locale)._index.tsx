@@ -6,6 +6,8 @@ import type {
   FeaturedCollectionFragment,
   RecommendedProductsQuery,
 } from 'storefrontapi.generated';
+import { Article, Blog, Image as HydrogenImage } from '@shopify/hydrogen/storefront-api-types';
+import { extend } from 'isbot';
 
 export const meta: MetaFunction = () => {
   return [{title: 'Hydrogen | Home'}];
@@ -26,13 +28,22 @@ export async function loader(args: LoaderFunctionArgs) {
  * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  */
 async function loadCriticalData({context}: LoaderFunctionArgs) {
-  const [{collections}] = await Promise.all([
+  const [{collections}, latestBlog] = await Promise.all([
     context.storefront.query(FEATURED_COLLECTION_QUERY),
+    context.storefront.query(LATEST_BLOG_QUERY,
+      {
+        variables: {
+          blogHandler: "news",
+          pageBy: 4
+        }
+      }
+    ),
     // Add other queries here, so that they are loaded in parallel
   ]);
 
   return {
     featuredCollection: collections.nodes[0],
+    latestBlog: latestBlog?.blog?.articles ?? {} 
   };
 }
 
@@ -57,10 +68,12 @@ function loadDeferredData({context}: LoaderFunctionArgs) {
 
 export default function Homepage() {
   const data = useLoaderData<typeof loader>();
+  console.log(data.latestBlog);
   return (
     <div className="home">
       <FeaturedCollection collection={data.featuredCollection} />
       <RecommendedProducts products={data.recommendedProducts} />
+      <LatestBlogs blogs={data.latestBlog} />
     </div>
   );
 }
@@ -126,6 +139,64 @@ function RecommendedProducts({
     </div>
   );
 }
+
+interface Blogs extends Array<Blog> {
+  nodes: Array<Article>
+}
+type PartialObjectDeep<T, R> = {
+  [P in keyof T]?: T[P] extends (infer U)[]
+    ? PartialObjectDeep<U, R>[]
+    : T[P] extends object
+    ? PartialObjectDeep<T[P], R>
+    : T[P];
+};
+
+
+function LatestBlogs({blogs}: {blogs: Blogs}) {
+  console.log("Function -> LatestBlogsblogs: ", blogs);
+
+  return (
+    <div>
+      <h3 className='text-2xl font-medium my-12'>Latest Blog</h3>
+      <div className='grid grid-cols-4 gap-8'>
+        {blogs.nodes.map((item) => (
+          <Link to={`/news/` + item.handle} key={item.id}>
+            <Image
+              data={item.image as PartialObjectDeep<HydrogenImage, { recurseIntro: true}>}
+              aspectRatio='5/3'
+              sizes="(min-width: 45em) 20vw, 50vw"
+            />
+            <h4 className='text-lg font-medium my-4'>{item.title}</h4>
+            <p>{item.excerpt}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const LATEST_BLOG_QUERY = `#graphql
+query Blog($blogHandler: String!, $pageBy: Int!) {
+    blog(handle: $blogHandler) {
+      title
+      handle
+      articles(first: $pageBy) {
+        nodes {
+          id
+          title
+          handle
+          excerpt
+          image {
+            url
+            altText
+            width
+            height
+            }
+        }
+      }
+    }
+  }
+`
 
 const FEATURED_COLLECTION_QUERY = `#graphql
   fragment FeaturedCollection on Collection {
