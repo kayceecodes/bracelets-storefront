@@ -1,5 +1,5 @@
-import {defer, type LoaderFunctionArgs} from '@shopify/remix-oxygen';
-import {Await, useLoaderData, Link, type MetaFunction} from '@remix-run/react';
+import {ActionFunctionArgs, defer, type LoaderFunctionArgs} from '@shopify/remix-oxygen';
+import {Await, useLoaderData, Link, type MetaFunction, Form} from '@remix-run/react';
 import {Suspense} from 'react';
 import {Image, Money} from '@shopify/hydrogen';
 import type {
@@ -8,6 +8,8 @@ import type {
 } from 'storefrontapi.generated';
 import { Article, Blog, Image as HydrogenImage } from '@shopify/hydrogen/storefront-api-types';
 import { extend } from 'isbot';
+import { ARTICLE_FRAGMENT } from 'data/fragments';
+
 
 export const meta: MetaFunction = () => {
   return [{title: 'Hydrogen | Home'}];
@@ -66,11 +68,31 @@ function loadDeferredData({context}: LoaderFunctionArgs) {
   };
 }
 
+export async function action({request, context}: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const firstName = formData.get('firstName');
+  const lastName = formData.get('lastName');
+  const email = formData.get('email');
+  const password = formData.get('password');
+  try {
+    const data = await context.storefront.mutate(CUSTOMER_CREATE_MUTATION, {
+      variables: {
+        input: { firstName, lastName, email, password }
+      }
+    });
+    if(!data.customerCreate.customer.id)
+      return(data);
+  } catch (error) {
+    
+  }
+}
+
 export default function Homepage() {
   const data = useLoaderData<typeof loader>();
   console.log(data.latestBlog);
   return (
     <div className="home">
+      <RegisterForm />
       <FeaturedCollection collection={data.featuredCollection} />
       <RecommendedProducts products={data.recommendedProducts} />
       <LatestBlogs blogs={data.latestBlog} />
@@ -175,6 +197,52 @@ function LatestBlogs({blogs}: {blogs: Blogs}) {
   )
 }
 
+function RegisterForm()
+{
+  return(
+    <Form method='post' className='grid gap-2 my-10'>
+      <input type='text' name='firstname' placeholder='first name' className='px-4 py-2' />
+      <input type='text' name='lastname' placeholder='last name' className='px-4 py-2' />
+      <input type='email' name='email' placeholder='email' className='px-4 py-2' />
+      <input type='password' name='password' placeholder='password' className='px-4 py-2' />
+      <button type='submit' className='bg-black text-white px-8 py-2'>Submit</button>
+    </Form>
+  );
+}
+
+const CUSTOMER_CREATE_MUTATION = `#graphql
+mutation customerCreate($input: CustomerInput!) {
+  customerCreate(input: $input) {
+    userErrors {
+      field
+      message
+    }
+    customer {
+      id
+      email
+      phone
+      taxExempt
+      acceptsMarketing
+      firstName
+      lastName
+      ordersCount
+      totalSpent
+      smsMarketingConsent {
+        marketingState
+        marketingOptInLevel
+      }
+      addresses {
+        address1
+        city
+        country
+        phone
+        zip
+      }
+    }
+  }
+}
+`
+
 const LATEST_BLOG_QUERY = `#graphql
 query Blog($blogHandler: String!, $pageBy: Int!) {
     blog(handle: $blogHandler) {
@@ -182,20 +250,12 @@ query Blog($blogHandler: String!, $pageBy: Int!) {
       handle
       articles(first: $pageBy) {
         nodes {
-          id
-          title
-          handle
-          excerpt
-          image {
-            url
-            altText
-            width
-            height
-            }
+          ...Article
         }
       }
     }
   }
+  ${ARTICLE_FRAGMENT}
 `
 
 const FEATURED_COLLECTION_QUERY = `#graphql
